@@ -2,6 +2,8 @@
 
 基于 [cmliu/CF-Workers-SUB](https://github.com/cmliu/CF-Workers-SUB) 修改的 Cloudflare Workers 订阅聚合与转换工具。
 
+![管理界面截图](screenshot.png)
+
 ## ⚙ 功能特点
 
 - 🔗 **订阅聚合** - 将多个订阅源合并为一个订阅链接
@@ -51,7 +53,7 @@
 ### 4. 开始使用
 
 - **管理面板**: `https://your-worker.workers.dev/{TOKEN}`
-- **订阅地址**: `https://your-worker.workers.dev/?token={TOKEN}`
+- **订阅地址**: `https://your-worker.workers.dev/subn/{TOKEN}`(subn中的n为正数)
 
 ---
 
