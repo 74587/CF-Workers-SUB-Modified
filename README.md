@@ -53,7 +53,8 @@
 ### 4. 开始使用
 
 - **管理面板**: `https://your-worker.workers.dev/{TOKEN}`
-- **订阅地址**: `https://your-worker.workers.dev/subn/{TOKEN}`(subn中的n为正数)
+- **编辑订阅**: `https://your-worker.workers.dev/sub1/{TOKEN}/edit`（sub1/sub2/sub3...）
+- **获取订阅**: `https://your-worker.workers.dev/sub1?token={TOKEN}`
 
 ---
 
