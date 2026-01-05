@@ -10,126 +10,44 @@
 - 🌐 **优选 IP** - 支持自定义优选 IP/域名替换节点地址
 - 💾 **KV 存储** - 使用 Cloudflare KV 存储配置数据
 - 🎨 **现代化 UI** - 响应式设计，支持明暗主题
-- 📲 **Telegram 通知** - 支持访问日志推送到 Telegram
 
 ---
 
-## 🛠️ Workers 部署方法
+## 🛠️ 部署方法
 
 ### 1. 部署 Cloudflare Worker
 
-- 在 [Cloudflare Worker](https://dash.cloudflare.com/) 控制台中创建一个新的 Worker
-- 将 [worker.js](worker.js) 的内容粘贴到 Worker 编辑器中
+- 在 [Cloudflare Dashboard](https://dash.cloudflare.com/) → Workers & Pages 中创建一个新的 Worker
+- 将 [worker.js](worker.js) 的内容粘贴到 Worker 编辑器中并保存
 
-### 2. 修改订阅入口
+### 2. 设置环境变量
 
-例如您的 Workers 项目域名为：`sub.example.workers.dev`
-
-通过修改 `mytoken` 赋值内容，达到修改你专属订阅的入口，避免订阅泄漏：
-
-```javascript
-let mytoken = 'auto';  // 修改为你自己的 token
-```
-
-如上所示，你的订阅地址则如下：
-```
-https://sub.example.workers.dev/auto
-或
-https://sub.example.workers.dev/?token=auto
-```
-
-### 3. 添加你的节点或订阅链接
-
-修改 `MainData` 变量中的内容：
-
-```javascript
-let MainData = `
-vless://...
-vmess://...
-https://your-subscription-link
-`
-```
-
-可同时放入多个节点链接与多个订阅链接，链接之间用换行分隔。
-
-> 💡 **推荐**: 添加 KV 命名空间后，可在管理界面直接编辑，变量将不会使用。
-
----
-
-## 📋 变量说明
-
-### 核心变量
+在 Worker 设置 → 变量 中添加：
 
 | 变量名 | 示例 | 必填 | 备注 |
 |--------|------|:----:|------|
-| `TOKEN` | `auto` | ✅ | 管理员访问令牌，用于订阅路径，例如：`/auto` |
-| `GUEST` | `test` | ❌ | 访客订阅令牌，例如：`/sub?token=test`（也支持 `GUESTTOKEN`） |
-| `LINK` | `vless://...` | ❌ | 节点/订阅链接，换行分隔（绑定 KV 后可在管理界面编辑） |
-| `LINKSUB` | `https://sub...` | ❌ | 额外的订阅链接（仅在未绑定 KV 时使用） |
+| `TOKEN` | `your-secret-token` | ✅ | 管理员访问令牌，建议使用复杂字符串 |
 
-### 订阅转换
+### 3. 绑定 KV 命名空间（强烈推荐）
 
-| 变量名 | 示例 | 必填 | 备注 |
-|--------|------|:----:|------|
-| `SUBNAME` | `CF-Workers-SUB` | ❌ | 订阅名称 |
-| `SUBAPI` | `SUBAPI.example.io` | ❌ | 订阅转换后端地址 |
-| `SUBCONFIG` | `https://raw.github...` | ❌ | 订阅转换配置文件 URL |
-| `SUBUPTIME` | `6` | ❌ | 订阅更新间隔时间（小时），默认 6 |
-
-### 优选 IP
-
-| 变量名 | 示例 | 必填 | 备注 |
-|--------|------|:----:|------|
-| `BESTIPURL` | `https://example.com/ip.txt` | ❌ | 优选 IP 列表 URL（也支持 `BESTIP`） |
-| `CUSTOMHOSTS` | `1.2.3.4, example.com` | ❌ | 自定义 IP/域名，逗号/空格/换行分隔（也支持 `CUSTOMHOST`） |
-
-### Telegram 通知
-
-| 变量名 | 示例 | 必填 | 备注 |
-|--------|------|:----:|------|
-| `TGTOKEN` | `6894123456:xxxxxxxxxx...` | ❌ | Telegram Bot Token（通过 @BotFather 获取） |
-| `TGID` | `6946912345` | ❌ | 接收通知的 Telegram 用户/群组 ID |
-| `TG` | `1` | ❌ | 设为 `1` 推送所有访问信息，`0` 仅推送异常访问（默认 0） |
-
-### 伪装设置
-
-| 变量名 | 示例 | 必填 | 备注 |
-|--------|------|:----:|------|
-| `URL302` | `https://www.google.com` | ❌ | 无效访问时 302 重定向到此地址 |
-| `URL` | `https://www.example.com` | ❌ | 无效访问时反向代理此地址 |
-
-> 💡 **说明**: `URL302` 和 `URL` 用于当访问者没有提供有效 Token 时的伪装。如果都不设置，默认显示 nginx 欢迎页面。
-
----
-
-## 📦 KV 存储（强烈推荐）
-
-> ⚠️ **重要**: 强烈建议绑定 KV 命名空间！不绑定 KV 的话，每次修改订阅都需要改代码重新部署，非常不方便。
-
-绑定 KV 命名空间后，支持以下功能：
+> ⚠️ **重要**: 强烈建议绑定 KV！不绑定的话每次修改订阅都需要改代码重新部署。
 
 | 功能 | 无 KV | 有 KV |
 |------|:-----:|:-----:|
-| 在线编辑订阅 | ❌ 需改代码重新部署 | ✅ 网页直接编辑 |
+| 在线编辑订阅 | ❌ 需改代码 | ✅ 网页直接编辑 |
 | 多订阅管理 | ❌ 不支持 | ✅ 支持 sub1/sub2/... |
-| 配置持久化 | ❌ 仅环境变量 | ✅ KV 永久存储 |
-| 管理界面 | ❌ 基础功能 | ✅ 完整管理功能 |
+| 配置持久化 | ❌ | ✅ KV 永久存储 |
 
-### 绑定 KV 命名空间
-
-1. 在 Cloudflare Dashboard → Workers & Pages → KV 中**创建命名空间**
+**绑定步骤：**
+1. Cloudflare Dashboard → Workers & Pages → KV → 创建命名空间
 2. 进入你的 Worker → 设置 → 变量 → KV 命名空间绑定
-3. 添加绑定，**变量名必须为 `KV`**，选择刚创建的命名空间
-4. 保存后即可使用完整功能
+3. 添加绑定，**变量名必须为 `KV`**
+4. 保存即可
 
----
+### 4. 开始使用
 
-## ⚠️ 注意事项
-
-- `TOKEN` 和 `GUEST` 建议使用 UUID 或复杂字符串，防止被猜测
-- `TGTOKEN` 和 `TGID` 在使用时需要先到 Telegram 注册并获取：
-  - `TGTOKEN` 是 Telegram bot 的凭证（通过 @BotFather 获取）
-  - `TGID` 是用来接收通知的 Telegram 用户或群组 ID
+- **管理面板**: `https://your-worker.workers.dev/{TOKEN}`
+- **订阅地址**: `https://your-worker.workers.dev/?token={TOKEN}`
 
 ---
 
@@ -145,8 +63,6 @@ https://your-subscription-link
 ## 📜 许可证
 
 本项目采用 [Apache-2.0](LICENSE) 许可证开源。
-
----
 
 ## 🙏 致谢
 
