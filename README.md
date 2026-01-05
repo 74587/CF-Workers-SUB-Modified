@@ -58,18 +58,47 @@ https://your-subscription-link
 
 ## 📋 变量说明
 
+### 核心变量
+
 | 变量名 | 示例 | 必填 | 备注 |
 |--------|------|:----:|------|
-| `TOKEN` | `auto` | ✅ | 汇聚订阅的订阅配置路径地址，例如：`/auto` |
-| `GUEST` | `test` | ❌ | 汇聚订阅的访客订阅 TOKEN，例如：`/sub?token=test` |
-| `LINK` | `vless://...`, `https://sub...` | ❌ | 可同时放入多个节点链接与多个订阅链接，链接之间用换行分隔（添加 KV 命名空间后，可在管理界面直接编辑，变量将不会使用） |
-| `TGTOKEN` | `6894123456:xxxxxxxxxx...` | ❌ | 发送 TG 通知的机器人 token |
-| `TGID` | `6946912345` | ❌ | 接收 TG 通知的账户数字 ID |
+| `TOKEN` | `auto` | ✅ | 管理员访问令牌，用于订阅路径，例如：`/auto` |
+| `GUEST` | `test` | ❌ | 访客订阅令牌，例如：`/sub?token=test`（也支持 `GUESTTOKEN`） |
+| `LINK` | `vless://...` | ❌ | 节点/订阅链接，换行分隔（绑定 KV 后可在管理界面编辑） |
+| `LINKSUB` | `https://sub...` | ❌ | 额外的订阅链接（仅在未绑定 KV 时使用） |
+
+### 订阅转换
+
+| 变量名 | 示例 | 必填 | 备注 |
+|--------|------|:----:|------|
 | `SUBNAME` | `CF-Workers-SUB` | ❌ | 订阅名称 |
-| `SUBAPI` | `SUBAPI.example.io` | ❌ | clash、singbox 等订阅转换后端 |
-| `SUBCONFIG` | `https://raw.github...` | ❌ | clash、singbox 等订阅转换配置文件 |
-| `BESTIPURL` | `https://example.com/ip.txt` | ❌ | 优选 IP 列表 URL |
-| `CUSTOMHOSTS` | `1.2.3.4, example.com` | ❌ | 自定义 IP/域名列表 |
+| `SUBAPI` | `SUBAPI.example.io` | ❌ | 订阅转换后端地址 |
+| `SUBCONFIG` | `https://raw.github...` | ❌ | 订阅转换配置文件 URL |
+| `SUBUPTIME` | `6` | ❌ | 订阅更新间隔时间（小时），默认 6 |
+
+### 优选 IP
+
+| 变量名 | 示例 | 必填 | 备注 |
+|--------|------|:----:|------|
+| `BESTIPURL` | `https://example.com/ip.txt` | ❌ | 优选 IP 列表 URL（也支持 `BESTIP`） |
+| `CUSTOMHOSTS` | `1.2.3.4, example.com` | ❌ | 自定义 IP/域名，逗号/空格/换行分隔（也支持 `CUSTOMHOST`） |
+
+### Telegram 通知
+
+| 变量名 | 示例 | 必填 | 备注 |
+|--------|------|:----:|------|
+| `TGTOKEN` | `6894123456:xxxxxxxxxx...` | ❌ | Telegram Bot Token（通过 @BotFather 获取） |
+| `TGID` | `6946912345` | ❌ | 接收通知的 Telegram 用户/群组 ID |
+| `TG` | `1` | ❌ | 设为 `1` 推送所有访问信息，`0` 仅推送异常访问（默认 0） |
+
+### 伪装设置
+
+| 变量名 | 示例 | 必填 | 备注 |
+|--------|------|:----:|------|
+| `URL302` | `https://www.google.com` | ❌ | 无效访问时 302 重定向到此地址 |
+| `URL` | `https://www.example.com` | ❌ | 无效访问时反向代理此地址 |
+
+> 💡 **说明**: `URL302` 和 `URL` 用于当访问者没有提供有效 Token 时的伪装。如果都不设置，默认显示 nginx 欢迎页面。
 
 ---
 
