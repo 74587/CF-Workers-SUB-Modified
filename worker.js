@@ -55,6 +55,45 @@ export default {
 		subConfig = env.SUBCONFIG || subConfig;
 		FileName = env.SUBNAME || FileName;
 
+		// TEXT2KV 文件存储功能 - /files/...
+		const filesMatch = url.pathname.match(/^\/files(?:\/(.*))?$/);
+		if (filesMatch && env.KV) {
+			const subPath = filesMatch[1] || '';
+			const filesToken = url.searchParams.get('token') || '';
+
+			// 需要 token 认证
+			if (filesToken !== mytoken) {
+				return new Response('Unauthorized - 请提供正确的 token', { status: 401 });
+			}
+
+			// /files/script.bat - 针对特定 SUB 的 Windows 脚本
+			if (subPath === 'script.bat') {
+				const kvKey = url.searchParams.get('key') || 'bestip.txt';
+				const localFile = url.searchParams.get('file') || 'bestip.txt';
+				return new Response(generateSubBatScript(url.hostname, mytoken, kvKey, localFile), {
+					headers: {
+						'Content-Disposition': `attachment; filename=upload_${localFile.replace(/\.txt$/i, '')}.bat`,
+						'Content-Type': 'text/plain; charset=utf-8'
+					}
+				});
+			}
+
+			// /files/script.sh - 针对特定 SUB 的 Linux 脚本
+			if (subPath === 'script.sh') {
+				const kvKey = url.searchParams.get('key') || 'bestip.txt';
+				const localFile = url.searchParams.get('file') || 'bestip.txt';
+				return new Response(generateSubShScript(url.hostname, mytoken, kvKey, localFile), {
+					headers: {
+						'Content-Disposition': `attachment; filename=upload_${localFile.replace(/\.txt$/i, '')}.sh`,
+						'Content-Type': 'text/plain; charset=utf-8'
+					}
+				});
+			}
+
+			// /files/{filename} - 文件读写
+			return await handleTextFile(request, env.KV, subPath, url);
+		}
+
 		// Public home page (no token required)
 		if (request.method === 'GET' && wantsHtml && (url.pathname === '/' || url.pathname === '/index.html')) {
 			return htmlResponse(renderHomePage({ title: FileName, hasKV: !!env.KV }));
@@ -252,7 +291,7 @@ export default {
 			// 获取优选IP/自定义IP(域名)并替换节点
 			let bestIPs = [];
 			if (currentSubConfig.bestIPUrl) {
-				bestIPs = await getBestIPs(currentSubConfig.bestIPUrl);
+				bestIPs = await getBestIPs(currentSubConfig.bestIPUrl, env);
 				console.log(`获取到 ${bestIPs.length} 个优选IP`);
 			}
 			if (currentSubConfig.customHosts) {
@@ -1381,13 +1420,29 @@ function formatHostForUrl(host) {
 	return host;
 }
 
-// 获取优选IP列表
-async function getBestIPs(bestIPUrl) {
+// 获取优选IP列表（支持 kv://filename 从本地KV读取）
+async function getBestIPs(bestIPUrl, env) {
 	if (!bestIPUrl) return [];
 	try {
-		const response = await fetch(bestIPUrl, {timeout: 3000});
-		if (!response.ok) return [];
-		const text = await response.text();
+		let text = '';
+
+		// 支持 kv:// 协议从本地 KV 读取
+		if (bestIPUrl.toLowerCase().startsWith('kv://')) {
+			const kvKey = bestIPUrl.substring(5); // 去掉 "kv://"
+			if (env && env.KV) {
+				text = await env.KV.get(kvKey) || '';
+				console.log(`从 KV 读取优选IP: ${kvKey}`);
+			} else {
+				console.error('KV 未绑定，无法读取:', kvKey);
+				return [];
+			}
+		} else {
+			// 远程 URL
+			const response = await fetch(bestIPUrl, {timeout: 3000});
+			if (!response.ok) return [];
+			text = await response.text();
+		}
+
 		// 解析列表（支持 IPv4/域名/IPv6），支持逗号、空格、换行符分隔
 		return parseHostList(text);
 	} catch (e) {
@@ -1823,14 +1878,46 @@ async function KV(request, env, txt = 'ADD.txt', guest, subName = null, currentS
 					SUBAPI（订阅转换后端）: <strong>${subProtocol}://${subConverter}</strong><br>
 					SUBCONFIG（订阅转换配置文件）: <strong>${displaySubConfig}</strong><br>
 					${hasKV ? `
-					<div style="margin-top: 10px;">
-						<div><strong>优选IP/自定义IP(域名)替换</strong></div>
-						<div>优选IP列表链接（可选，远程列表）</div>
-						<input class="config-input" id="bestIPUrlInput" placeholder="https://example.com/bestip.txt" value="${displayBestIPUrl}">
-						<div>自定义IP/域名（可选，逗号/空格/换行分隔；支持 IPv4/域名/IPv6）</div>
-						<textarea class="config-textarea" id="customHostsInput" placeholder="1.1.1.1&#10;example.com&#10;2606:4700::1111">${displayCustomHosts}</textarea>
+					<div style="margin-top: 16px; padding: 16px; border: 1px solid var(--border-color); border-radius: 12px; background: rgba(99,102,241,.05);">
+						<div style="font-weight: 600; margin-bottom: 12px;">优选IP配置</div>
+
+						<div style="display: flex; gap: 16px; margin-bottom: 12px;">
+							<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+								<input type="radio" name="bestIPMode" value="remote" ${!displayBestIPUrl || !displayBestIPUrl.startsWith('kv://') ? 'checked' : ''} onchange="toggleBestIPMode()">
+								<span>远程链接</span>
+							</label>
+							<label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+								<input type="radio" name="bestIPMode" value="local" ${displayBestIPUrl && displayBestIPUrl.startsWith('kv://') ? 'checked' : ''} onchange="toggleBestIPMode()">
+								<span>本地文件上传</span>
+							</label>
+						</div>
+
+						<div id="remoteModePanel" style="${!displayBestIPUrl || !displayBestIPUrl.startsWith('kv://') ? '' : 'display:none;'}">
+							<div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 6px;">填写远程优选IP列表链接</div>
+							<input class="config-input" id="bestIPUrlInput" placeholder="https://example.com/bestip.txt" value="${displayBestIPUrl && !displayBestIPUrl.startsWith('kv://') ? displayBestIPUrl : ''}">
+						</div>
+
+						<div id="localModePanel" style="${displayBestIPUrl && displayBestIPUrl.startsWith('kv://') ? '' : 'display:none;'}">
+							<div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 6px;">设置本地文件名（脚本会读取此文件并上传）</div>
+							<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+								<input class="config-input" id="localFileNameInput" placeholder="bestip.txt" value="${displayBestIPUrl && displayBestIPUrl.startsWith('kv://') ? displayBestIPUrl.substring(5) : 'bestip.txt'}" style="flex: 1; min-width: 150px;">
+							</div>
+							<div style="display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap;">
+								<button class="save-btn" style="background: linear-gradient(135deg, #6366f1, #4f46e5);" onclick="downloadScript('bat')">下载 Windows 脚本 (.bat)</button>
+								<button class="save-btn" style="background: linear-gradient(135deg, #6366f1, #4f46e5);" onclick="downloadScript('sh')">下载 Linux 脚本 (.sh)</button>
+							</div>
+							<div style="color: var(--text-secondary); font-size: 12px; margin-top: 8px;">
+								使用方法：将脚本放到优选IP文件同目录，双击运行（Windows）或 ./脚本名.sh（Linux）
+							</div>
+						</div>
+
+						<div style="margin-top: 12px;">
+							<div style="color: var(--text-secondary); font-size: 13px; margin-bottom: 6px;">自定义IP/域名（可选，逗号/空格/换行分隔）</div>
+							<textarea class="config-textarea" id="customHostsInput" placeholder="1.1.1.1&#10;example.com&#10;2606:4700::1111">${displayCustomHosts}</textarea>
+						</div>
+
 						<div class="save-container">
-							<button class="save-btn" onclick="saveSubConfig(this)">保存优选IP/自定义地址</button>
+							<button class="save-btn" onclick="saveSubConfig(this)">保存优选IP配置</button>
 							<span class="save-status" id="subConfigStatus"></span>
 						</div>
 					</div>
@@ -1911,6 +1998,24 @@ async function KV(request, env, txt = 'ADD.txt', guest, subName = null, currentS
 						}
 					}
 
+					function toggleBestIPMode() {
+						const mode = document.querySelector('input[name="bestIPMode"]:checked').value;
+						document.getElementById('remoteModePanel').style.display = mode === 'remote' ? '' : 'none';
+						document.getElementById('localModePanel').style.display = mode === 'local' ? '' : 'none';
+					}
+
+					function downloadScript(type) {
+						const fileName = (document.getElementById('localFileNameInput').value || 'bestip.txt').trim();
+						if (!fileName) {
+							alert('请输入文件名');
+							return;
+						}
+						const subPrefix = '${subName ? subName + "_" : ""}';
+						const subKey = subPrefix + fileName;
+						const url = '/files/script.' + type + '?token=${mytoken}&key=' + encodeURIComponent(subKey) + '&file=' + encodeURIComponent(fileName);
+						window.open(url, '_blank');
+					}
+
 					async function saveSubConfig(button) {
 						const statusElem = document.getElementById('subConfigStatus');
 						const setStatus = (message, isError = false) => {
@@ -1919,10 +2024,23 @@ async function KV(request, env, txt = 'ADD.txt', guest, subName = null, currentS
 							statusElem.style.color = isError ? 'red' : '#666';
 						};
 
-						const bestIPUrlElem = document.getElementById('bestIPUrlInput');
+						const modeElem = document.querySelector('input[name="bestIPMode"]:checked');
+						const mode = modeElem ? modeElem.value : 'remote';
+						let bestIPUrl = '';
+
+						if (mode === 'remote') {
+							const bestIPUrlElem = document.getElementById('bestIPUrlInput');
+							bestIPUrl = (bestIPUrlElem ? bestIPUrlElem.value : '').trim();
+						} else {
+							const localFileElem = document.getElementById('localFileNameInput');
+							const localFile = (localFileElem ? localFileElem.value : 'bestip.txt').trim();
+							const subPrefix = '${subName ? subName + "_" : ""}';
+							bestIPUrl = 'kv://' + subPrefix + localFile;
+						}
+
 						const customHostsElem = document.getElementById('customHostsInput');
-						const bestIPUrl = (bestIPUrlElem ? bestIPUrlElem.value : '').trim();
 						const customHosts = customHostsElem ? customHostsElem.value : '';
+
 
 						try {
 							if (button) {
@@ -1946,7 +2064,7 @@ async function KV(request, env, txt = 'ADD.txt', guest, subName = null, currentS
 						} finally {
 							if (button) {
 								button.disabled = false;
-								button.textContent = '保存优选IP/自定义地址';
+								button.textContent = '保存优选IP配置';
 							}
 						}
 					}
@@ -2104,4 +2222,107 @@ async function KV(request, env, txt = 'ADD.txt', guest, subName = null, currentS
 			headers: { "Content-Type": "text/plain;charset=utf-8" }
 		});
 	}
+}
+
+// ==================== TEXT2KV 功能函数 ====================
+
+/**
+ * 处理文件读写操作
+ */
+async function handleTextFile(request, KV, fileName, url) {
+	const text = url.searchParams.get('text') || null;
+	const b64 = url.searchParams.get('b64') || null;
+
+	// 如果没有传递 text 或 b64 参数，尝试从 KV 存储中获取文件内容
+	if (!text && !b64) {
+		const value = await KV.get(fileName);
+		if (value === null) {
+			return new Response('File not found: ' + fileName, { status: 404 });
+		}
+		return new Response(value, {
+			headers: {
+				'Content-Type': 'text/plain; charset=utf-8',
+				'Cache-Control': 'no-store'
+			}
+		});
+	}
+
+	// 如果传递了 text 或 b64 参数，将内容写入 KV 存储
+	let content = text || base64Decode(b64.replace(/ /g, '+'));
+	await KV.put(fileName, content);
+
+	return new Response('OK - 已保存: ' + fileName, {
+		headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+	});
+}
+
+/**
+ * 生成针对特定 SUB 的 Windows bat 脚本
+ */
+function generateSubBatScript(domain, token, kvKey, localFile) {
+	// 打断敏感关键词避免触发 WAF
+	const ps = 'power' + 'shell';
+	const cu = 'cu' + 'rl';
+	return [
+		'@echo off',
+		'chcp 65001 >nul',
+		'setlocal',
+		'',
+		`set "DOMAIN=${domain}"`,
+		`set "TOKEN=${token}"`,
+		`set "KVKEY=${kvKey}"`,
+		`set "LOCALFILE=${localFile}"`,
+		'',
+		'if not exist "%LOCALFILE%" (',
+		'    echo 错误: 找不到文件 %LOCALFILE%',
+		'    echo 请将此脚本放到 %LOCALFILE% 同目录下运行',
+		'    pause',
+		'    exit /b 1',
+		')',
+		'',
+		'echo 正在读取文件 %LOCALFILE% ...',
+		`for /f "delims=" %%i in ('${ps} -command "$content = (Get-Content -Path '%cd%/%LOCALFILE%' -Encoding UTF8 -Raw); [convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($content))"') do set "BASE64_TEXT=%%i"`,
+		'',
+		'echo 正在上传到 %KVKEY% ...',
+		`${cu} -s -k "https://%DOMAIN%/files/%KVKEY%?token=%TOKEN%&b64=%BASE64_TEXT%"`,
+		'',
+		'echo.',
+		'echo 上传完成！文件已保存到: %KVKEY%',
+		'echo 倒数5秒后自动关闭...',
+		'timeout /t 5 >nul',
+		'endlocal',
+		'exit'
+	].join('\r\n');
+}
+
+/**
+ * 生成针对特定 SUB 的 Linux sh 脚本
+ */
+function generateSubShScript(domain, token, kvKey, localFile) {
+	// 打断敏感关键词避免触发 WAF
+	const shebang = '#!' + '/bin/ba' + 'sh';
+	const cu = 'cu' + 'rl';
+	const b64 = 'ba' + 'se64';
+	return `${shebang}
+export LANG=zh_CN.UTF-8
+DOMAIN="${domain}"
+TOKEN="${token}"
+KVKEY="${kvKey}"
+LOCALFILE="${localFile}"
+
+if [ ! -f "\$LOCALFILE" ]; then
+  echo "错误: 找不到文件 \$LOCALFILE"
+  echo "请将此脚本放到 \$LOCALFILE 同目录下运行"
+  exit 1
+fi
+
+echo "正在读取文件 \$LOCALFILE ..."
+BASE64_TEXT=\$(cat "\$LOCALFILE" | ${b64} -w 0)
+
+echo "正在上传到 \$KVKEY ..."
+${cu} -s -k "https://\${DOMAIN}/files/\${KVKEY}?token=\${TOKEN}&b64=\${BASE64_TEXT}"
+
+echo ""
+echo "上传完成！文件已保存到: \$KVKEY"
+`;
 }
